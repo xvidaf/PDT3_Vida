@@ -143,3 +143,18 @@ FROM planet_osm_polygon
 WHERE admin_level = '2'))),(SELECT way
 FROM planet_osm_polygon
 WHERE NAME LIKE '%Bratislava%' AND admin_level = '6'))
+
+INSERT INTO planet_osm_polygon (osm_id, name, way) values (241212,'Okolie_Bratislavy',(
+SELECT ST_DIFFERENCE((SELECT ST_INTERSECTION((SELECT ST_BUFFER(
+(SELECT way
+FROM planet_osm_polygon
+WHERE NAME LIKE '%Bratislava%' AND admin_level = '6'),20000)),
+				(SELECT way
+FROM planet_osm_polygon
+WHERE admin_level = '2'))),(SELECT way
+FROM planet_osm_polygon
+WHERE NAME LIKE '%Bratislava%' AND admin_level = '6'))))
+
+SELECT ST_AREA(ST_TRANSFORM(way,4326),FALSE)/1000000 as sizekm
+FROM planet_osm_polygon
+WHERE osm_id = 241212
