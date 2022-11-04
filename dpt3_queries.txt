@@ -1,0 +1,145 @@
+SELECT Find_SRID('public', 'planet_osm_polygon', 'way');
+
+#2
+SELECT osm_id,name, way, st_x(st_centroid(st_transform(way,4326))) AS "Longitude", st_y(st_centroid(st_transform(way,4326))) AS "Latitude" FROM
+planet_osm_polygon
+WHERE admin_level = '4'
+
+SELECT osm_id,name, way, st_astext(way) FROM
+planet_osm_polygon
+WHERE admin_level = '4'
+
+#3
+SELECT osm_id,name, way_area, st_area(st_transform(way,4326), False)/1000000 as size
+FROM planet_osm_polygon
+WHERE admin_level = '4'
+ORDER by size DESC
+
+#4
+
+#My house: 47.86819884496766, 18.270149780241553	47.868300616857255, 18.270285413824137	47.86811459656346, 18.27029847483579	47.86821165071309, 18.270436117804785
+
+SELECT ST_MakePolygon( ST_GeomFromText('LINESTRING(47.86819884496766 18.270149780241553, 47.868300616857255 18.270285413824137, 47.868300616857255 18.270285413824137, 47.86819884496766 18.270149780241553)'));
+SELECT st_x(st_centroid(st_transform(ST_GeomFromText('LINESTRING(47.86819884496766 18.270149780241553, 47.868300616857255 18.270285413824137, 47.868300616857255 18.270285413824137, 47.86819884496766 18.270149780241553)',4326),4326))) AS "Longitude", st_y(st_centroid(st_transform(ST_GeomFromText('LINESTRING(47.86819884496766 18.270149780241553, 47.868300616857255 18.270285413824137, 47.868300616857255 18.270285413824137, 47.86819884496766 18.270149780241553)',4326),4326))) AS "Latitude";
+
+
+INSERT INTO planet_osm_polygon
+(name, way, osm_id)
+VALUES ('Filipov dom', ST_MakePolygon(st_transform(ST_GeomFromText('LINESTRING(18.27014978680466 47.868199134993915, 18.270286579457487 47.86830619493461,18.270431418736955 47.86821532894873,18.270295967188563 47.8681127671495 ,18.27014978680466 47.868199134993915)',4326),3857)),420420);
+
+SELECT *
+FROM planet_osm_polygon
+WHERE name LIKE 'Filipov dom';
+
+#5
+
+#Nitriansky
+SELECT osm_id,name, way FROM
+planet_osm_polygon
+WHERE admin_level = '4' and ST_Contains(way, (SELECT way as filip_way 
+FROM planet_osm_polygon
+WHERE name = 'Filipov dom'))
+
+
+#6
+
+SELECT Find_SRID('public', 'planet_osm_point', 'way');
+
+SELECT st_transform(ST_PointFromText('POINT(48.15542176441618 17.04151397658695)', 4326),3857);
+
+INSERT INTO planet_osm_point
+(name, way, osm_id)
+VALUES ('Filipova lokacia',st_transform(ST_PointFromText('POINT(17.04151397658695 48.15542176441618)', 4326),3857) ,420420);
+
+#7
+#Nie, niesom doma
+SELECT ST_Contains((SELECT way FROM planet_osm_point WHERE name = 'Filipova lokacia'),(SELECT way FROM planet_osm_polygon WHERE name = 'Filipov dom'));
+
+#8
+#Have to do * cos(lat), to account for distortion
+
+SELECT ST_Distance((SELECT st_transform(way,3857) FROM planet_osm_point WHERE name = 'Filipova lokacia'), (SELECT st_transform(way,3857) FROM planet_osm_polygon WHERE name = 'Fakulta informatiky a informačných technológií STU')) 
+* cosd(st_y(st_transform((SELECT way
+FROM planet_osm_point
+WHERE name = 'Filipova lokacia'),4326))) as distance;
+
+#9
+#Hotovo, ulozene na ploche
+
+
+#10
+SELECT name, way, size, st_x(st_centroid(st_transform(way,4326))) AS "Longitude", st_y(st_centroid(st_transform(way,4326))) AS "Latitude"
+FROM
+(SELECT name, way, st_area(st_transform(way,4326), False)/1000000 as size FROM (
+SELECT name, way
+FROM planet_osm_polygon
+WHERE admin_level = '8') as okresy_a_spol
+where name like '%okres%'
+ORDER by size ASC
+LIMIT 1) as smallest
+
+
+#11
+
+CREATE TABLE roads_near_hranica (LIKE planet_osm_roads INCLUDING ALL);
+
+SELECT * FROM planet_osm_roads
+WHERE ST_Distance((SELECT ST_intersection((select way
+FROM planet_osm_polygon
+WHERE name = 'okres Malacky'),(select way
+FROM planet_osm_polygon
+WHERE name = 'okres Pezinok'))),planet_osm_roads.way) <= 10000 AND boundary IS NULL and highway NOT LIKE ALL(ARRAY['path','footpath','track']);
+
+INSERT INTO roads_near_hranica
+SELECT * FROM planet_osm_roads
+WHERE ST_Distance((SELECT ST_intersection((select way
+FROM planet_osm_polygon
+WHERE name = 'okres Malacky'),(select way
+FROM planet_osm_polygon
+WHERE name = 'okres Pezinok'))),planet_osm_roads.way) <= 10000 AND boundary IS NULL and highway NOT LIKE ALL(ARRAY['path','footpath','track']);
+
+12
+
+SELECT name, nm5 as meno_kataster, idn5 as id_katastra,  ST_Length(ST_Intersection(ST_Transform(way,3857),ST_Transform(wkb_geometry,3857))) as dlzka_cesty, way as road_way, wkb_geometry as kataster_way, highway, boundary
+FROM 
+(SELECT *
+FROM planet_osm_roads
+WHERE ST_intersects(way,(SELECT way
+FROM planet_osm_polygon
+WHERE admin_level = '8' and name = 'okres Komárno'))) as cesty,
+(select *
+FROM test
+WHERE ST_contains((SELECT way
+FROM planet_osm_polygon
+WHERE admin_level = '8' and name = 'okres Komárno'),ST_Transform(wkb_geometry,3857))) as katastre
+WHERE ST_intersects(ST_Transform(way,3857),ST_Transform(wkb_geometry,3857)) and boundary is NULL
+ORDER BY dlzka_cesty DESC
+LIMIT 1
+
+SELECT name, nm5 as meno_kataster, idn5 as id_katastra,  ST_Length(ST_Intersection(ST_Transform(way,3857),ST_Transform(wkb_geometry,3857))) as dlzka_cesty, way as road_way, wkb_geometry as kataster_way, highway, boundary
+FROM 
+(SELECT *
+FROM planet_osm_roads
+WHERE ST_intersects(way,(SELECT way
+FROM planet_osm_polygon
+WHERE admin_level = '8' and name = 'okres Komárno'))) as cesty,
+(select *
+FROM test
+WHERE ST_contains((SELECT way
+FROM planet_osm_polygon
+WHERE admin_level = '8' and name = 'okres Komárno'),ST_Transform(wkb_geometry,3857))) as katastre
+WHERE ST_intersects(ST_Transform(way,3857),ST_Transform(wkb_geometry,3857)) and boundary is NULL and highway IS NOT NULL
+ORDER BY dlzka_cesty DESC
+LIMIT 1
+
+13.
+
+SELECT ST_DIFFERENCE((SELECT ST_INTERSECTION((SELECT ST_BUFFER(
+(SELECT way
+FROM planet_osm_polygon
+WHERE NAME LIKE '%Bratislava%' AND admin_level = '6'),20000)),
+				(SELECT way
+FROM planet_osm_polygon
+WHERE admin_level = '2'))),(SELECT way
+FROM planet_osm_polygon
+WHERE NAME LIKE '%Bratislava%' AND admin_level = '6'))
